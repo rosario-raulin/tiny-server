@@ -12,7 +12,7 @@
 void handle_client(int c) {
 	int read_ret, bytes_read = 0, allocated = 8192;
 	char *end, *buf = malloc(allocated);
-	while (buf && (read_ret = read(c, buf + bytes_read, allocated - bytes_read)) >= 0) {
+	while (buf && (read_ret = read(c, buf + bytes_read, allocated - bytes_read)) > 0) {
 		bytes_read += read_ret;
 		if ((end = strstr(buf, "\r\n\r\n")) != NULL) { break; }
 		if (bytes_read >= allocated) {
@@ -20,7 +20,7 @@ void handle_client(int c) {
 			buf = realloc(buf, allocated);
 		}
 	}
-	if (read_ret >= 0 && buf) {
+	if (read_ret > 0 && buf) {
 		end = end ? end : buf + bytes_read;
 		end[0] = '\0'; 
 		char* line = strtok(buf, "\r");
