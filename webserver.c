@@ -6,10 +6,13 @@
 #include <sys/sendfile.h>
 #include <cnaiapi.h>
 
+#define OK_MSG "HTTP/1.0 200 OK\r\n\r\n"
+#define NOT_FOUND_MSG "HTTP/1.0 404 Not Found\r\n\r\nNot Found"
+
 void handle_client(int c) {
 	int read_ret, bytes_read = 0, allocated = 8192;
 	char *end, *buf = malloc(allocated);
-	while (buf && (read_ret = read(c, buf + bytes_read, allocated - bytes_read)) > 0) {
+	while (buf && (read_ret = read(c, buf + bytes_read, allocated - bytes_read)) >= 0) {
 		bytes_read += read_ret;
 		if ((end = strstr(buf, "\r\n\r\n")) != NULL) { break; }
 		if (bytes_read >= allocated) {
@@ -17,21 +20,21 @@ void handle_client(int c) {
 			buf = realloc(buf, allocated);
 		}
 	}
-	if (read_ret > 0 && buf) {
+	if (read_ret >= 0 && buf) {
 		end = end ? end : buf + bytes_read;
 		end[0] = '\0'; 
 		char* line = strtok(buf, "\r");
 		if (line) {
-			int fd;
 			char* path = strtok(line, " ") ? strtok(NULL, " ") : NULL;
-			if (path && (fd = open(++path, O_RDONLY)) > 0) {
-				struct stat s;
-				if (fstat(fd, &s) == 0) {
-					int bytes_written = 0;
-					while ((bytes_written += write(c, "HTTP/1.0 200 OK\r\n\r\n", 19)) < 19);
-					sendfile(c, fd, NULL, s.st_size);
-					close(fd);
+			int fd;
+			struct stat s;
+			if (path && stat(++path, &s) == 0 && S_ISREG(s.st_mode) && (fd = open(path, O_RDONLY)) != -1) {
+				if (write(c, OK_MSG, sizeof(OK_MSG)-1) == sizeof(OK_MSG)-1) {
+						sendfile(c, fd, NULL, s.st_size);
 				}
+				close(fd);
+			} else {
+				write(c, NOT_FOUND_MSG, sizeof(NOT_FOUND_MSG)-1);
 			}
 		}
 		free(buf);
@@ -48,7 +51,7 @@ int main(int argc, char* argv[]) {
 		switch(child) {
 			case 0:
 				handle_client(c);
-				break;
+				/* fallthrough */
 			case -1:
 			default:
 				end_contact(c);
@@ -57,3 +60,4 @@ int main(int argc, char* argv[]) {
 	}
 	return EXIT_SUCCESS;
 }
+
